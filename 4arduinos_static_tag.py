@@ -18,7 +18,7 @@ import numpy as np
 def initialize_global_variables():
     global all_points_over_time, fig, ax, sc, number_of_points_shown
     global known_locations, avg_distances, threshold, max_distance, start_time, sensor_middle
-    global port0,port1,port2,port3
+    global port0,port1,port2,port3, beacon_fail
     global data_queue, time_to_cm, ser1, ser2, ser3, ser4
     
     all_points_over_time = [[]]     # this is where all the points are stored
@@ -43,6 +43,8 @@ def initialize_global_variables():
     known_locations = np.array([beacon1, beacon2, beacon3])
 
     avg_distances = np.array([0, 0, 0]) # distances for triangulation
+
+    beacon_fail = np.array([False,False,False])
     
     threshold = 20                  # % of how far the measurements are allowed to be apart   
     max_distance = 50               # maximum distance 2 points can be away from each other after 2 measurements
@@ -143,9 +145,34 @@ def on_key_press(key, stop_event,beacon2_stop,beacon3_stop,tag_stop):
             tag_stop.set()
     except AttributeError:
         pass
+# The current beacon is measuring the wrong sensor
+def switch_beacon(beacon_nr):
+    print(f"Now you should switch to a different sensor on beacon {beacon_nr+1}")
+    # still need to figure out what logic this needs since 
 # gets the measured values and checks which ones are useable
-def filter_inputs(b1,t1,b2,t2,b3,t3):
-    pass
+def filter_inputs(b1, t1, b2, t2, b3, t3):
+    connections = []
+
+    for idx, (beacon, tag) in enumerate([(b1, t1), (b2, t2), (b3, t3)]):
+        if abs(beacon - tag) <= 15:
+            connections.append("++")
+            avg_distances[idx] = (beacon + tag) / 2
+            beacon_fail[idx] = False
+        elif abs(beacon - avg_distances[idx]) <= 15:
+            connections.append("+-")
+            avg_distances[idx] = beacon - 5  # -5 since it fires first
+            beacon_fail[idx] = False
+        elif abs(tag - avg_distances[idx]) <= 15:
+            connections.append("-+")
+            avg_distances[idx] = tag + 5  # +5 since it fires later
+            if (beacon_fail[idx] == True): 
+                switch_beacon(idx)
+            else:
+                beacon_fail[idx] = True
+        else:
+            connections.append("--")
+
+    print(f"Connections: {connections}")
 # checks if the new calculated point is possible
 def check_possible_point(new_point):
     if not isinstance(new_point, np.ndarray) or new_point.shape != (3,):
@@ -284,16 +311,7 @@ def find_tag(tag_stop):
         dist1t, distt1 = next(communicator1)
         dist2t, distt2 = next(communicator2)
         dist3t, distt3 = next(communicator3)
-        #filter_inputs(dist1t, distt1,dist2t, distt2,dist3t, distt3)
-        within_range1, average1 = within_threshold(dist1t,distt1)
-        if (within_range1): avg_distances[0] = average1 + sensor_middle
-        within_range2, average2 = within_threshold(dist2t,distt2)
-        if (within_range2): avg_distances[1] = average2 + sensor_middle
-        within_range3, average3 = within_threshold(dist3t,distt3)
-        if (within_range3): avg_distances[2] = average3 + sensor_middle
-        print(f"Connection 1: {within_range1}, 2: {within_range2}, 3: {within_range3}")
-        if average1 is not None and average2 is not None and average3 is not None:
-            print(f"1: {int(average1)}, 2: {int(average2)}, 3: {int(average3)}")
+        filter_inputs(dist1t, distt1,dist2t, distt2,dist3t, distt3)
         new_point = trilateration()
         possible = check_possible_point(new_point)
         if (possible): data_queue.put(new_point)
