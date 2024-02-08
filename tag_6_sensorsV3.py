@@ -36,9 +36,9 @@ def initialize_global_variables():
     ax.set_ylabel('Y Label')
     ax.set_zlabel('Z Label')
     
-    ax.set_xlim([0, 250])           # Set axis limits in cm
-    ax.set_ylim([0, 250])
-    ax.set_zlim([0, 100])
+    ax.set_xlim([0, 300])           # Set axis limits in cm
+    ax.set_ylim([0, 300])
+    ax.set_zlim([-200, 0])
     
     beacon1 = np.array([0, 0, 0])   # beacon locations
     beacon2 = np.array([202, 0, 0])
@@ -109,12 +109,12 @@ def trilateration():
     K1 = P1 + X * Xn + Y * Yn + Z1 * Zn
     K2 = P1 + X * Xn + Y * Yn + Z2 * Zn
  
-    if K1[2] > 0:
+    if K1[2] < 0:
         return K1
-    elif K2[2] > 0:
+    elif K2[2] < 0:
         return K2
     else:
-        print("Error: Trilateration failed. Target point cannot be determined.")
+        #print("Error: Trilateration failed. Target point cannot be determined.")
         return None
 # depending on the amount of ports and sensors creates an apropriate header
 def generate_csv_header(port_and_sensors_list):
@@ -154,13 +154,15 @@ def on_key_press(key, stop_event,beacon2_stop,beacon3_stop,tag_stop):
         pass
 # gets the measured values and checks which ones are useable and if a different sensor is required
 def check_inputs(beacon_number, beacon_dist, tag_dist):
-    if 0 <= (beacon_dist - tag_dist) <= 25:                    # correct case
-        avg_distances[beacon_number] = (beacon_dist + tag_dist)/2
+    distance_midlde = 8         # the distance between the middle of the tag and the sensors
+    avg_offset = 7              # half of the difference between 2 sensors that see each other
+    if 0.1 <= (beacon_dist - tag_dist) <= 25:                    # correct case
+        avg_distances[beacon_number] = (beacon_dist + tag_dist)/2 + distance_midlde
         beacon_connection[beacon_number*2+1] = False
         tag_connection[beacon_number*2+1] = False
         return False
     if 0 <= (avg_distances[beacon_number] - tag_dist) <= 20:    # beacon wrong 
-        avg_distances[beacon_number] = tag_dist + 7
+        avg_distances[beacon_number] = tag_dist + avg_offset + distance_midlde
         tag_connection[beacon_number*2+1] = False
         if beacon_connection[beacon_number*2+1] == True:        # last time beacon was already not working
             beacon_connection[beacon_number*2] = 2 if beacon_connection[beacon_number*2]  == 1 else 1
@@ -168,7 +170,7 @@ def check_inputs(beacon_number, beacon_dist, tag_dist):
         beacon_connection[beacon_number*2+1] = True             # first time beacon not working
         return False
     if 0 <= (beacon_dist - avg_distances[beacon_number]) <= 20: # tag wrong
-        avg_distances[beacon_number] = beacon_dist - 7
+        avg_distances[beacon_number] = beacon_dist - avg_offset + distance_midlde
         beacon_connection[beacon_number*2+1] = False  
         if tag_connection[beacon_number*2+1] == True:           # last time tag was already not working
             tag_connection[beacon_number*2] = 1 if tag_connection[beacon_number*2] == 6 else tag_connection[beacon_number*2] + 1
@@ -190,9 +192,9 @@ def update_plot(frame):
         item = data_queue.get()
         if isinstance(item, np.ndarray) and item.shape == (3,):
             new_point = tuple(item)
-            print(f"New point: {new_point}.")
+            #print(f"New point: {new_point}.")
         else:
-            print(f"Invalid item in the queue: {item}")
+            #print(f"Invalid item in the queue: {item}")
             continue
         all_points_over_time[0].append(new_point)
         current_points = all_points_over_time[0][-number_of_points_shown:]
