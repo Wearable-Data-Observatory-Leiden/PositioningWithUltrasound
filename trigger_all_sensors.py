@@ -20,8 +20,8 @@ from tabulate import tabulate
 # all the global variables get created and initialized
 def initialize_global_variables():
     global all_points_over_time, fig, ax, sc, number_of_points_shown, port_and_sensors_list
-    global known_locations, avg_distances, threshold, max_distance, start_time, sensor_middle
-    global port0,port1,port2,port3, beacon_connection, tag_connection, csv_writer, max_sensors
+    global known_locations, avg_distances
+    global port0,port1,port2,port3, beacon_connection, tag_connection, csv_writer
     global data_queue, time_to_cm, ser1, ser2, ser3, ser4
     
     all_points_over_time = [[]]     # this is where all the points are stored
@@ -36,9 +36,9 @@ def initialize_global_variables():
     ax.set_ylabel('Y Label')
     ax.set_zlabel('Z Label')
     
-    ax.set_xlim([0, 250])           # Set axis limits in cm
-    ax.set_ylim([0, 250])
-    ax.set_zlim([0, 100])
+    ax.set_xlim([0, 300])           # Set axis limits in cm
+    ax.set_ylim([0, 300])
+    ax.set_zlim([-200, 0])
     
     beacon1 = np.array([0, 0, 0])   # beacon locations
     beacon2 = np.array([202, 0, 0])
@@ -50,11 +50,6 @@ def initialize_global_variables():
     beacon_connection = np.array([2,False,2,False,2,False])
     tag_connection = np.array([3,False,5,False,6,False])
     
-    threshold = 20                  # % of how far the measurements are allowed to be apart   
-    max_distance = 50               # maximum distance 2 points can be away from each other after 2 measurements
-
-    start_time = time.time()        # Used for timestamps
-
     board_type = "uno"              # since we are working with the same port and sensors
     port0 = '/dev/ttyACM0'
     port1 = '/dev/ttyACM1'
@@ -63,7 +58,6 @@ def initialize_global_variables():
     sketch_path = "/home/stanshands/Arduino/Ysensors/2sensors/2sensors.ino"
     sketch_path2 = "/home/stanshands/Arduino/Ysensors/6sensors/6sensors.ino"
     port_and_sensors_list = [('/dev/ttyACM0', 2),('/dev/ttyACM1', 2),('/dev/ttyACM2', 2),('/dev/ttyACM3', 6)]
-    max_sensors = 6                 # maximum amount of sensors connected to 1 arduino
 
     upload_arduino_sketch(sketch_path, board_type, port0)
     upload_arduino_sketch(sketch_path, board_type, port1)
@@ -76,8 +70,6 @@ def initialize_global_variables():
     ser4 = serial.Serial(port3, baudrate = 115200, timeout=1)
 
     time_to_cm =  343 / 10000       # conversion rate in case of normal temperature
-
-    sensor_middle = 5               # distance between the sensor and the middle point of the tag 
 
     data_queue = queue.Queue()
 
@@ -117,12 +109,12 @@ def trilateration():
     K1 = P1 + X * Xn + Y * Yn + Z1 * Zn
     K2 = P1 + X * Xn + Y * Yn + Z2 * Zn
  
-    if K1[2] > 0:
+    if K1[2] < 0:
         return K1
-    elif K2[2] > 0:
+    elif K2[2] < 0:
         return K2
     else:
-        print("Error: Trilateration failed. Target point cannot be determined.")
+        #print("Error: Trilateration failed. Target point cannot be determined.")
         return None
 # depending on the amount of ports and sensors creates an apropriate header
 def generate_csv_header(port_and_sensors_list):
@@ -162,13 +154,15 @@ def on_key_press(key, stop_event,beacon2_stop,beacon3_stop,tag_stop):
         pass
 # gets the measured values and checks which ones are useable and if a different sensor is required
 def check_inputs(beacon_number, beacon_dist, tag_dist):
-    if 0 <= (beacon_dist - tag_dist) <= 25:                    # correct case
-        avg_distances[beacon_number] = (beacon_dist + tag_dist)/2
+    distance_midlde = 8         # the distance between the middle of the tag and the sensors
+    avg_offset = 7              # half of the difference between 2 sensors that see each other
+    if 0.1 <= (beacon_dist - tag_dist) <= 25:                    # correct case
+        avg_distances[beacon_number] = (beacon_dist + tag_dist)/2 + distance_midlde
         beacon_connection[beacon_number*2+1] = False
         tag_connection[beacon_number*2+1] = False
         return False
     if 0 <= (avg_distances[beacon_number] - tag_dist) <= 20:    # beacon wrong 
-        avg_distances[beacon_number] = tag_dist + 7
+        avg_distances[beacon_number] = tag_dist + avg_offset + distance_midlde
         tag_connection[beacon_number*2+1] = False
         if beacon_connection[beacon_number*2+1] == True:        # last time beacon was already not working
             beacon_connection[beacon_number*2] = 2 if beacon_connection[beacon_number*2]  == 1 else 1
@@ -176,7 +170,7 @@ def check_inputs(beacon_number, beacon_dist, tag_dist):
         beacon_connection[beacon_number*2+1] = True             # first time beacon not working
         return False
     if 0 <= (beacon_dist - avg_distances[beacon_number]) <= 20: # tag wrong
-        avg_distances[beacon_number] = beacon_dist - 7
+        avg_distances[beacon_number] = beacon_dist - avg_offset + distance_midlde
         beacon_connection[beacon_number*2+1] = False  
         if tag_connection[beacon_number*2+1] == True:           # last time tag was already not working
             tag_connection[beacon_number*2] = 1 if tag_connection[beacon_number*2] == 6 else tag_connection[beacon_number*2] + 1
@@ -192,36 +186,15 @@ def check_inputs(beacon_number, beacon_dist, tag_dist):
     beacon_connection[beacon_number*2+1] = True
     tag_connection[beacon_number*2+1] == True
     return return_statement
-# checks if the new calculated point is possible
-def check_possible_point(new_point):
-    if not isinstance(new_point, np.ndarray) or new_point.shape != (3,):
-        print(f"Invalid variable, not a point: {new_point}")
-        return False
-    
-    # this part of the code is not working yet, will do this part later
-    numeric_points = [point for point in all_points_over_time if all(isinstance(val, (int, float)) for val in point)]
-
-    if not numeric_points:
-        print("No numeric points found in all_points_over_time.")
-        return True
-
-    last_point = np.array(numeric_points[-1], dtype=float)  # Convert to float array
-
-    difference_vector = np.array(new_point) - np.array(last_point)
-    distance = np.linalg.norm(difference_vector)
-    if (distance>max_distance): 
-        print("Distance from this point and last is too big")
-        return False
-    return True
 # update the plot when a new point gets added
 def update_plot(frame):
     while not data_queue.empty():
         item = data_queue.get()
         if isinstance(item, np.ndarray) and item.shape == (3,):
             new_point = tuple(item)
-            print(f"New point: {new_point}.")
+            #print(f"New point: {new_point}.")
         else:
-            print(f"Invalid item in the queue: {item}")
+            #print(f"Invalid item in the queue: {item}")
             continue
         all_points_over_time[0].append(new_point)
         current_points = all_points_over_time[0][-number_of_points_shown:]
@@ -314,11 +287,11 @@ def initalize_beacon3(beacon3_stop):
     avg_distances = distances_to_centroid
 # sends the information of which sensors should trigger to the arduinos to find the tag location
 def find_tag(tag_stop):
-    t1 = "3"
-    t2 = "5"
-    t3 = "6"
+    t1 = "1"
+    t2 = "2"
+    t3 = "5"
     b1 = "2"
-    b2 = "2"
+    b2 = "1"
     b3 = "2"
     communicator1 = communicate_and_process(ser1, ser4, b1, t1,0,3)
     communicator2 = communicate_and_process(ser2, ser4, b2, t2,1,3)
@@ -326,16 +299,16 @@ def find_tag(tag_stop):
     while not tag_stop.is_set():
         dist1t, distt1 = next(communicator1)
         if (check_inputs(0,dist1t,distt1)): communicator1 = communicate_and_process(ser1, ser4,str(beacon_connection[0]), str(tag_connection[0]),0,3)
-        # new_point = trilateration()
-        # data_queue.put(new_point) if check_possible_point(new_point) else data_queue.put("not a point")
+        new_point = trilateration()
+        data_queue.put(new_point) if new_point is not None else data_queue.put("not a point")
         dist2t, distt2 = next(communicator2)
         if (check_inputs(1,dist2t,distt2)): communicator2 = communicate_and_process(ser2, ser4, str(beacon_connection[2]), str(tag_connection[2]),1,3)
-        # new_point = trilateration()
-        # data_queue.put(new_point) if check_possible_point(new_point) else data_queue.put("not a point")
+        new_point = trilateration()
+        data_queue.put(new_point) if new_point is not None else data_queue.put("not a point")
         dist3t, distt3 = next(communicator3)
         if (check_inputs(2,dist3t,distt3)): communicator3 = communicate_and_process(ser3, ser4, str(beacon_connection[4]), str(tag_connection[4]),2,3)
-        # new_point = trilateration()
-        # data_queue.put(new_point) if check_possible_point(new_point) else data_queue.put("not a point")
+        new_point = trilateration()
+        data_queue.put(new_point) if new_point is not None else data_queue.put("not a point")
         data = [
             ["Distance 1:", int(avg_distances[0]), "1->T:", dist1t, "1<-T:", distt1, "Sensor B:", beacon_connection[0], "Connection B:", beacon_connection[1], "Sensor T:", tag_connection[0], "Connection T:", tag_connection[1]],
             ["Distance 2:", int(avg_distances[1]), "2->T:", dist2t, "2<-T:", distt2, "Sensor B:", beacon_connection[2], "Connection B:", beacon_connection[3], "Sensor T:", tag_connection[2], "Connection T:", tag_connection[3]],
@@ -354,13 +327,10 @@ def start_all_threads():
     time.sleep(2)
     initalize_beacon2(beacon2_stop) # find the locations of the beacons
     initalize_beacon3(beacon3_stop)
-    #find_tag(tag_stop)
     tag_and_beacon_signals = threading.Thread(target=find_tag, args=(tag_stop,))
     tag_and_beacon_signals.start()  # send all the signals to the ports 
     ani = animation.FuncAnimation(fig, update_plot, frames=None, interval=100)
-    while True:
-        time.sleep(2)
-    #plt.show()                      # see the location of the tag
+    plt.show()                      # see the location of the tag
     tag_and_beacon_signals.stop()   # end all the threads
     keyboard_listener.stop()
 # calls all the required funtions
