@@ -152,40 +152,6 @@ def on_key_press(key, stop_event,beacon2_stop,beacon3_stop,tag_stop):
             tag_stop.set()
     except AttributeError:
         pass
-# gets the measured values and checks which ones are useable and if a different sensor is required
-def check_inputs(beacon_number, beacon_dist, tag_dist):
-    distance_midlde = 8         # the distance between the middle of the tag and the sensors
-    avg_offset = 7              # half of the difference between 2 sensors that see each other
-    if 0.1 <= (beacon_dist - tag_dist) <= 25:                    # correct case
-        avg_distances[beacon_number] = (beacon_dist + tag_dist)/2 + distance_midlde
-        beacon_connection[beacon_number*2+1] = False
-        tag_connection[beacon_number*2+1] = False
-        return False
-    if 0 <= (avg_distances[beacon_number] - tag_dist) <= 20:    # beacon wrong 
-        avg_distances[beacon_number] = tag_dist + avg_offset + distance_midlde
-        tag_connection[beacon_number*2+1] = False
-        if beacon_connection[beacon_number*2+1] == True:        # last time beacon was already not working
-            beacon_connection[beacon_number*2] = 2 if beacon_connection[beacon_number*2]  == 1 else 1
-            return True                                         # this only works for beacons with 2 sensors on them
-        beacon_connection[beacon_number*2+1] = True             # first time beacon not working
-        return False
-    if 0 <= (beacon_dist - avg_distances[beacon_number]) <= 20: # tag wrong
-        avg_distances[beacon_number] = beacon_dist - avg_offset + distance_midlde
-        beacon_connection[beacon_number*2+1] = False  
-        if tag_connection[beacon_number*2+1] == True:           # last time tag was already not working
-            tag_connection[beacon_number*2] = 1 if tag_connection[beacon_number*2] == 6 else tag_connection[beacon_number*2] + 1
-            return True
-        tag_connection[beacon_number*2+1] = True                # first time tag not working
-        return False
-    # both wrong
-    return_statement = beacon_connection[beacon_number*2+1] or tag_connection[beacon_number*2+1]
-    if beacon_connection[beacon_number*2+1] == True:        # last time beacon was already not working
-        beacon_connection[beacon_number*2] = 2 if beacon_connection[beacon_number*2]  == 1 else 1
-    if tag_connection[beacon_number*2+1] == True:           # last time tag was already not working
-        tag_connection[beacon_number*2] = 1 if tag_connection[beacon_number*2] == 6 else tag_connection[beacon_number*2] + 1
-    beacon_connection[beacon_number*2+1] = True
-    tag_connection[beacon_number*2+1] == True
-    return return_statement
 # update the plot when a new point gets added
 def update_plot(frame):
     while not data_queue.empty():
@@ -203,6 +169,48 @@ def update_plot(frame):
         sc_static = ax.scatter([], [], [], color='blue')  # The beacons
         sc_static._offsets3d = tuple(map(tuple, known_locations.T))
         fig.canvas.flush_events()
+# what sensors should be triggered and sends that to each port
+def trigger_all_ports(beacon_sensor, tag_sensor):
+    row1 = [''] * 24
+    row2 = [''] * 24   
+    row3 = [''] * 24
+    row4 = [''] * 24    
+    csv_entry1 = 0 + int(beacon_sensor)
+    csv_entry2 = 2 + int(beacon_sensor)
+    csv_entry3 = 4 + int(beacon_sensor)
+    csv_entry4 = 6 + int(tag_sensor)
+    ser1.write(beacon_sensor.encode('utf-8'))
+    ser2.write(beacon_sensor.encode('utf-8'))
+    ser3.write(beacon_sensor.encode('utf-8'))
+    ser4.write(tag_sensor.encode('utf-8'))
+    time.sleep(0.1)
+    try:
+        if ser1.in_waiting:   # wait for data from the arduino
+            info_b1 = ser1.readline().decode('utf').rstrip('\n')
+            distance_b1 = info_b1.split(":")
+            dist_b1 = float(distance_b1[1].strip()) * time_to_cm
+            row1[csv_entry1] = dist_b1                
+            csv_writer.writerow(row1)
+        if ser2.in_waiting:   # wait for data from the arduino
+            info_b2 = ser2.readline().decode('utf').rstrip('\n')
+            distance_b2 = info_b2.split(":")
+            dist_b2 = float(distance_b2[1].strip()) * time_to_cm
+            row2[csv_entry2] = dist_b2                
+            csv_writer.writerow(row2)
+        if ser3.in_waiting:   # wait for data from the arduino
+            info_b3 = ser3.readline().decode('utf').rstrip('\n')
+            distance_b3 = info_b3.split(":")
+            dist_b3 = float(distance_b3[1].strip()) * time_to_cm
+            row3[csv_entry3] = dist_b3                
+            csv_writer.writerow(row3)
+        if ser4.in_waiting:   # wait for data from the arduino
+            info_b4 = ser4.readline().decode('utf').rstrip('\n')
+            distance_b4 = info_b4.split(":")
+            dist_b4 = float(distance_b4[1].strip()) * time_to_cm
+            row4[csv_entry4] = dist_b4                
+            csv_writer.writerow(row4)
+    except UnboundLocalError as error:
+        print(f"Error: {error}")
 # gets serial and sensor numbers, then sends and recieves the data from the arduino
 def communicate_and_process(ser_send, ser_receive, sensornr_send, sensornr_receive, port_nr_1, port_nr_2):
     row1 = [''] * 24
@@ -287,34 +295,33 @@ def initalize_beacon3(beacon3_stop):
     avg_distances = distances_to_centroid
 # sends the information of which sensors should trigger to the arduinos to find the tag location
 def find_tag(tag_stop):
-    t1 = "1"
-    t2 = "2"
-    t3 = "5"
-    b1 = "2"
-    b2 = "1"
-    b3 = "2"
-    communicator1 = communicate_and_process(ser1, ser4, b1, t1,0,3)
-    communicator2 = communicate_and_process(ser2, ser4, b2, t2,1,3)
-    communicator3 = communicate_and_process(ser3, ser4, b3, t3,2,3)
     while not tag_stop.is_set():
-        dist1t, distt1 = next(communicator1)
-        if (check_inputs(0,dist1t,distt1)): communicator1 = communicate_and_process(ser1, ser4,str(beacon_connection[0]), str(tag_connection[0]),0,3)
-        new_point = trilateration()
-        data_queue.put(new_point) if new_point is not None else data_queue.put("not a point")
-        dist2t, distt2 = next(communicator2)
-        if (check_inputs(1,dist2t,distt2)): communicator2 = communicate_and_process(ser2, ser4, str(beacon_connection[2]), str(tag_connection[2]),1,3)
-        new_point = trilateration()
-        data_queue.put(new_point) if new_point is not None else data_queue.put("not a point")
-        dist3t, distt3 = next(communicator3)
-        if (check_inputs(2,dist3t,distt3)): communicator3 = communicate_and_process(ser3, ser4, str(beacon_connection[4]), str(tag_connection[4]),2,3)
-        new_point = trilateration()
-        data_queue.put(new_point) if new_point is not None else data_queue.put("not a point")
-        data = [
-            ["Distance 1:", int(avg_distances[0]), "1->T:", dist1t, "1<-T:", distt1, "Sensor B:", beacon_connection[0], "Connection B:", beacon_connection[1], "Sensor T:", tag_connection[0], "Connection T:", tag_connection[1]],
-            ["Distance 2:", int(avg_distances[1]), "2->T:", dist2t, "2<-T:", distt2, "Sensor B:", beacon_connection[2], "Connection B:", beacon_connection[3], "Sensor T:", tag_connection[2], "Connection T:", tag_connection[3]],
-            ["Distance 3:", int(avg_distances[2]), "3->T:", dist3t, "3<-T:", distt3, "Sensor B:", beacon_connection[4], "Connection B:", beacon_connection[5], "Sensor T:", tag_connection[4], "Connection T:", tag_connection[5]]
-        ]
-        print(tabulate(data, headers=["", "", "", "", "", "", "", "", "", "", "", ""], tablefmt="grid"))
+        trigger_all_ports("1","1")
+        trigger_all_ports("2","2")
+        trigger_all_ports("1","3")
+        trigger_all_ports("2","4") 
+        trigger_all_ports("1","5")
+        trigger_all_ports("2","6")           
+def find_tag_old(tag_stop):
+    while not tag_stop.is_set():
+        b11, t11 = communicate_and_process(ser1, ser4, "1", "1",0,3)
+        b21, t21 = communicate_and_process(ser2, ser4, "1", "1",0,3)
+        b31, t31 = communicate_and_process(ser3, ser4, "1", "1",0,3)
+        b12, t12 = communicate_and_process(ser1, ser4, "2", "2",0,3)
+        b22, t22 = communicate_and_process(ser2, ser4, "2", "2",0,3)
+        b32, t32 = communicate_and_process(ser3, ser4, "2", "2",0,3)
+        b11, t13 = communicate_and_process(ser1, ser4, "3", "3",0,3)
+        b21, t23 = communicate_and_process(ser2, ser4, "3", "3",0,3)
+        b31, t33 = communicate_and_process(ser3, ser4, "3", "3",0,3)
+        b12, t14 = communicate_and_process(ser1, ser4, "4", "4",0,3)
+        b22, t24 = communicate_and_process(ser2, ser4, "4", "4",0,3)
+        b32, t34 = communicate_and_process(ser3, ser4, "4", "4",0,3)
+        b11, t15 = communicate_and_process(ser1, ser4, "5", "5",0,3)
+        b21, t25 = communicate_and_process(ser2, ser4, "5", "5",0,3)
+        b31, t35 = communicate_and_process(ser3, ser4, "5", "5",0,3)
+        b12, t16 = communicate_and_process(ser1, ser4, "6", "6",0,3)
+        b22, t26 = communicate_and_process(ser2, ser4, "6", "6",0,3)
+        b32, t36 = communicate_and_process(ser3, ser4, "6", "6",0,3)
 # starts all threads
 def start_all_threads():
     stop_event = threading.Event()  # the signal that the threads shoulds stop
@@ -327,11 +334,7 @@ def start_all_threads():
     time.sleep(2)
     initalize_beacon2(beacon2_stop) # find the locations of the beacons
     initalize_beacon3(beacon3_stop)
-    tag_and_beacon_signals = threading.Thread(target=find_tag, args=(tag_stop,))
-    tag_and_beacon_signals.start()  # send all the signals to the ports 
-    ani = animation.FuncAnimation(fig, update_plot, frames=None, interval=100)
-    plt.show()                      # see the location of the tag
-    tag_and_beacon_signals.stop()   # end all the threads
+    find_tag(tag_stop)
     keyboard_listener.stop()
 # calls all the required funtions
 def main():
