@@ -75,7 +75,6 @@ def initialize_global_variables():
 
     csv_writer = None
     start_time = time.time()
-
 # trilitaration function that calculates the location the current point
 def trilateration():
     r1 = avg_distances[0]
@@ -140,7 +139,7 @@ def upload_arduino_sketch(sketch_path, board_type, port):
     subprocess.run([cli_command, "compile", "--fqbn", fqbn, sketch_path], capture_output=True, text=True)
     subprocess.run([cli_command, "upload", "--fqbn", fqbn, "--port", port, sketch_path])
 # keyboard listener
-def on_key_press(key, stop_event,beacon2_stop,beacon3_stop,sensors_stop,tag_stop):
+def on_key_press(key, stop_event,beacon2_stop,beacon3_stop,tag_stop):
     try:
         letter = key.char
         data_queue.put(letter)
@@ -151,7 +150,7 @@ def on_key_press(key, stop_event,beacon2_stop,beacon3_stop,sensors_stop,tag_stop
         if letter == "a":
             beacon3_stop.set()
         if letter == "n":
-            sensors_stop.set()
+            data_queue.put(letter)
         if letter == "q":
             tag_stop.set()
     except AttributeError:
@@ -300,15 +299,14 @@ def initalize_beacon3(beacon3_stop):
     global avg_distances
     avg_distances = distances_to_centroid
 # measures all the timing differences between sensor pairs
-def initalize_sensors():
-    beacon_sensor = 1
-    tag_sensor = 1
-    beacon = 1
+def initalize_sensors(data_queue):
+    beacon_sensor = 2
+    tag_sensor = 4
+    beacon = 3
+    combinations_checked = set()
     while True:
         if (beacon_sensor == 1):
             beacon_sensor = 2
-            print(f"Beacon: {beacon}, B sensor: {beacon_sensor}, tag sensor: {tag_sensor}")
-            trigger_all_ports(str(beacon_sensor),str(tag_sensor))
         else:
             beacon_sensor = 1
             if beacon == 3:
@@ -317,8 +315,17 @@ def initalize_sensors():
             else:
                 beacon += 1
                 tag_sensor += 2 if tag_sensor < 4 else -4
+        combination = (beacon, beacon_sensor, tag_sensor)
+        if combination in combinations_checked:
+            break  # Stop if combination has already been checked
+        combinations_checked.add(combination)
+        print(f"Beacon: {beacon}, B sensor: {beacon_sensor}, tag sensor: {tag_sensor}")
+        while data_queue.empty():
             print(f"Beacon: {beacon}, B sensor: {beacon_sensor}, tag sensor: {tag_sensor}")
-            trigger_all_ports(str(beacon_sensor),str(tag_sensor))
+            time.sleep(0.2)
+        letter = data_queue.get()
+        # Trigger sensor ports here
+    print(f"Amound: {len(combinations_checked)} All combinations checked")
 # sends the information of which sensors should trigger to the arduinos to find the tag location
 def find_tag(tag_stop):
     while not tag_stop.is_set():
@@ -333,15 +340,13 @@ def start_all_threads():
     stop_event = threading.Event()  # the signal that the threads shoulds stop
     beacon2_stop = threading.Event()# the signal that beacon2 is in position
     beacon3_stop = threading.Event()# the signal that beacon3 is in position
-    sensors_stop = threading.Event()# the signal the sensors ar calibrated
     tag_stop = threading.Event()    # the signal that the tag location is no longer required
-    keyboard_listener = keyboard.Listener(on_press=on_key_press)
-    keyboard_listener = keyboard.Listener(on_press=lambda key: on_key_press(key, stop_event,beacon2_stop,beacon3_stop,sensors_stop,tag_stop))
+    keyboard_listener = keyboard.Listener(on_press=lambda key: on_key_press(key, stop_event,beacon2_stop,beacon3_stop,tag_stop))
     keyboard_listener.start()
     time.sleep(2)
     initalize_beacon2(beacon2_stop) # find the locations of the beacons
     initalize_beacon3(beacon3_stop)
-    initalize_sensors(sensors_stop) # calibrate the sensors
+    initalize_sensors() # calibrate the sensors
     find_tag(tag_stop)
     keyboard_listener.stop()
 # calls all the required funtions
