@@ -42,7 +42,7 @@ def trilateration(r1,r2,r3):
         #print("Error: Trilateration failed. Target point cannot be determined.")
         return None
 def calculate_location(row):
-    r1, r2, r3 = pd.to_numeric(row[11]), pd.to_numeric(row[12]), pd.to_numeric(row[13])  # Extract r1, r2, r3 from the row
+    r1, r2, r3 = pd.to_numeric(row['1 final']), pd.to_numeric(row['2 final']), pd.to_numeric(row['3 final'])  # Extract r1, r2, r3 from the row
     return trilateration(r1, r2, r3)
 def read_data(csv_file_path, header_line):
     # Read the CSV file with the determined delimiter and specifying the number of columns to read
@@ -101,7 +101,7 @@ def calculate_averages(data_beacons, beacon2_index, beacon3_index):
     avg_P3S2 = numeric_values.mean()
 
     return avg_P1S1, avg_P2S2, avg_P1S2, avg_P2S1, avg_P3S1, avg_P3S2
-def add_new_column1(data):
+def add_column_B1T(data):
     new_column_values = []
     previous_value = None
     for index,row in data.iterrows():
@@ -114,7 +114,7 @@ def add_new_column1(data):
         previous_value = new_column_values[-1]
     data.insert(8, 'B1->T', new_column_values)
     return data
-def add_new_column2(data):
+def add_column_B2T(data):
     new_column_values = []
     previous_value = None
     for index,row in data.iterrows():
@@ -127,7 +127,7 @@ def add_new_column2(data):
         previous_value = new_column_values[-1]
     data.insert(9, 'B2->T', new_column_values)
     return data
-def add_new_column3(data):
+def add_column_B3T(data):
     new_column_values = []
     previous_value = None
     for index,row in data.iterrows():
@@ -144,56 +144,58 @@ def difference_columns(df, column1, column2):
     values_column1 = df[column1].loc[df[column1] != '']
     values_column2 = df[column2].loc[df[column2] != '']
 
-    numeric_values_column1 = pd.to_numeric(values_column1, errors='coerce')
+    numeric_values_column1 = pd.to_numeric(values_column1, errors='coerce').head(5)
     avg_B = numeric_values_column1.mean()
 
-    numeric_values_column2 = pd.to_numeric(values_column2, errors='coerce')
+    numeric_values_column2 = pd.to_numeric(values_column2, errors='coerce').head(5)
     avg_T = numeric_values_column2.mean()
 
     return avg_B - avg_T
+def aggregate_non_empty(series):
+    return series[series != ''].iloc[-1] if any(series != '') else ''
+def calculate_movement(point1, point2):
+    if point1 is None or isinstance(point1, int):
+        # If point1 is an integer, return (0, 0, 0)
+        return (0, 0, 0)
+    else:
+        x1, y1, z1 = point1
+        x2, y2, z2 = point2
+        distance = np.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
+        return distance
+def fillna_with_tuple(series, value):
+    return series.fillna(pd.Series([value] * len(series), index=series.index))
 # Main code
 csv_file_path = 'test_data.csv'
 with open(csv_file_path, 'r') as file:
     header_line = file.readline().strip()
 data_beacons = read_data(csv_file_path, header_line)
 beacon2_index, beacon3_index = calculate_beacon_indices(data_beacons)
-# print(f"Index B2: {beacon2_index}")
-# print(f"Index B3: {beacon3_index}")
 avg_P1S1, avg_P2S2, avg_P1S2, avg_P2S1, avg_P3S1, avg_P3S2 = calculate_averages(data_beacons, beacon2_index, beacon3_index)
-# print(f"Avg value p1s1: {avg_P1S1}, p2s2: {avg_P2S2},p1s2: {avg_P1S2}, p2s1: {avg_P2S1},p3s1: {avg_P3S1}, p3s2: {avg_P3S2}")
-
-# Define the function to aggregate non-empty values into a string without brackets
-def aggregate_non_empty(series):
-    return series[series != ''].iloc[-1] if any(series != '') else ''
-
 # Read your CSV file and perform necessary preprocessing
 data = pd.read_csv(csv_file_path, skiprows=beacon3_index, header=None, delimiter=',', usecols=range(13))
 headers = header_line.split(',')[:13]
 data.columns = headers
 data = data.round()
 data = data.fillna('')
-
 # Group the DataFrame by every 4 rows and apply the aggregation function to each column separately
 grouped_data = data.groupby(data.index // 4).agg({col: aggregate_non_empty for col in data.columns}).reset_index()
-grouped_data = add_new_column1(grouped_data)
-grouped_data = add_new_column2(grouped_data)
-grouped_data = add_new_column3(grouped_data)
-
+# Make new columns that uses the filtered data from the beacons
+grouped_data = add_column_B1T(grouped_data)
+grouped_data = add_column_B2T(grouped_data)
+grouped_data = add_column_B3T(grouped_data)
+# Calculate the difference in measurements between the sensor pairs
 dif1 = difference_columns(grouped_data,'B1->T','P4s1')
 dif2 = difference_columns(grouped_data,'B2->T','P4s3')
 dif3 = difference_columns(grouped_data,'B3->T','P4s5')
-print(f"difference 1: {dif1}, dif2: {dif2}, dif3:{dif3}")
-# Now grouped_data should contain individual values in each column instead of tuples
-grouped_data['Location'] = grouped_data.apply(calculate_location, axis=1)
-new_df = grouped_data.drop(columns=['P4s1','P4s2','P4s3','P4s4','P4s5','P4s6','Location'])
-
+# remove the unnececery columns
+df = grouped_data.drop(columns=['P1s1','P1s2','P2s1','P2s2','P3s1','P3s2','P4s1','P4s2','P4s3','P4s4','P4s5','P4s6'])
 distance_sensor_middle = 7
-new_df['1 final'] = round(new_df['B1->T'] + distance_sensor_middle - (dif1/2))
-new_df['2 final'] = round(new_df['B2->T'] + distance_sensor_middle - (dif2/2))
-new_df['3 final'] = round(new_df['B3->T'] + distance_sensor_middle - (dif3/2))
-new_df['Location'] = new_df.apply(calculate_location, axis=1)
-print(new_df)
-
-
-
-
+df['1 final'] = round(df['B1->T'] + distance_sensor_middle - (dif1/2))
+df['2 final'] = round(df['B2->T'] + distance_sensor_middle - (dif2/2))
+df['3 final'] = round(df['B3->T'] + distance_sensor_middle - (dif3/2))
+df['Location'] = df.apply(calculate_location, axis=1)
+df = df.drop(columns=['B1->T','B2->T','B3->T'])
+df = df[df['Location'].notna()]
+df['Movement'] = df['Location'].diff().fillna(0).apply(
+    lambda x: calculate_movement(x, (0, 0, 0)))
+print(df)
