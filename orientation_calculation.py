@@ -148,13 +148,7 @@ def check_error(entry,measurements,beacon1,beacon2,beacon3):
     error1 = measurements[entry[0]-1] - beacon1 + 30
     error2 = measurements[entry[1]-1] - beacon2 + 20
     error3 = measurements[entry[2]-1] - beacon3 + 10
-    # print(entry)
-    # print(f"Beacon1:{beacon1}, measurement: {measurements[entry[0]-1]}")
-    # print(f"Error 1: {error1}")
-    # print(f"Error 2: {error2}")
-    # print(f"Error 3: {error3}")
     total_error = abs(error1) + abs(error2) + abs(error3) 
-    # print(f"Total error: {total_error}")
     return(total_error)
 def find_lowest_error(all_errors):
     min_error = min(all_errors)
@@ -167,29 +161,45 @@ orientations = [
 (4, 1, 2),(4, 1, 3),(4, 2, 3),(4, 5, 1),(4, 5, 2),(4, 5, 3),(4, 5, 6),(4, 6, 1),(4, 6, 2),(4, 6, 3),
 (5, 1, 2),(5, 1, 3),(5, 1, 4),(5, 2, 3),(5, 2, 4),(5, 3, 4),(5, 6, 1),(5, 6, 2),(5, 6, 3),(5, 6, 4),
 (6, 1, 2),(6, 1, 3),(6, 1, 4),(6, 1, 5),(6, 2, 3),(6, 2, 4),(6, 2, 5),(6, 3, 4),(6, 3, 5),(6, 4, 5)]
+
+
+
 # Main code
+
+# read in the data and find the moment where the beacons are initialized, and at what distance
 csv_file_path = 'test_data.csv'
 with open(csv_file_path, 'r') as file:
     header_line = file.readline().strip()
 data_beacons = read_data(csv_file_path, header_line)
 beacon2_index, beacon3_index = calculate_beacon_indices(data_beacons)
 avg_P1S1, avg_P2S2, avg_P1S2, avg_P2S1, avg_P3S1, avg_P3S2 = calculate_averages(data_beacons, beacon2_index, beacon3_index)
-# Read your CSV file and perform necessary preprocessing
+
+
+# read in the data after beacon initialization and prepare the data in compressed rows
 data = pd.read_csv(csv_file_path, skiprows=beacon3_index, header=None, delimiter=',', usecols=range(13))
 headers = header_line.split(',')[:13]
 data.columns = headers
 data = data.round(1)
 data = data.fillna('')
 grouped_data = data.groupby(data.index // 4).agg({col: aggregate_non_empty for col in data.columns}).reset_index()
+
+# Make new columns that compresses the data of the 2 sensors on each beacon
+# if measurement is equal to beacon initialization, last measurement is used 
 grouped_data = add_new_column1(grouped_data)
 grouped_data = add_new_column2(grouped_data)
 grouped_data = add_new_column3(grouped_data)
+
+# Calculate the difference in measurements between the sensor pairs
 dif1 = difference_columns(grouped_data,'B1->T','P4s1')
 dif2 = difference_columns(grouped_data,'B2->T','P4s3')
 dif3 = difference_columns(grouped_data,'B3->T','P4s5')
-print(f"Dif1:{dif1} dif2:{dif2} dif3:{dif3}")
-print(grouped_data)
-# orientation calculations
+
+# # printing this data is usefull for checking if everything is correct
+# print(f"Dif1:{dif1} dif2:{dif2} dif3:{dif3}")
+# print(grouped_data)
+
+# get the beacon measurements, looks like the calculation of avg_Pxsx but with the new column
+# this seems to be a terrible way but its atleast something to compare the tag data to
 measurements = get_measurements(grouped_data)
 column_name = 'B1->T'
 first_six_entries = grouped_data[column_name].iloc[:6]
@@ -207,17 +217,17 @@ beacon3 = first_six_entries.mean()
 print(f"Beacon 3 {beacon3}")
 
 print(measurements)
+
+# for each orientation, calculate the error
+# the error is the difference between what was expected based on fixed values
+# at this time I thought 30,20,10 cm differnce would be alright but that has turned out not to be true
 all_errors = []
 for entry in orientations:
     error = check_error(entry,measurements,beacon1,beacon2,beacon3)
     all_errors.append(error)
     print("Error for", entry, ":", error)  # Debugging step
 
-print("Error for entry 5:", orientations[5], ":", all_errors[5])  # Debugging step
-# Find the index of the combination with the lowest error
+# Find the combination with the lowest error
 combination_index = find_lowest_error(all_errors)
-
-# Retrieve the combination with the lowest error
 combination = orientations[combination_index]
-
 print(f"Best combination: {combination}, total error: {all_errors[find_lowest_error(all_errors)]}")
