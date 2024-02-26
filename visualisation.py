@@ -5,6 +5,8 @@ from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.animation import FuncAnimation
 from matplotlib import animation 
 import queue
+
+
 def trilateration(r1,r2,r3):
     P1 = np.array([0, 0, 0])   # beacon locations
     P2 = np.array([180, 0, 0])
@@ -103,7 +105,7 @@ def calculate_averages(data_beacons, beacon2_index, beacon3_index):
     avg_P3S2 = numeric_values.mean()
 
     return avg_P1S1, avg_P2S2, avg_P1S2, avg_P2S1, avg_P3S1, avg_P3S2
-def add_new_column1(data):
+def add_column_B1T(data):
     new_column_values = []
     previous_value = None
     for index,row in data.iterrows():
@@ -116,7 +118,7 @@ def add_new_column1(data):
         previous_value = new_column_values[-1]
     data.insert(8, 'B1->T', new_column_values)
     return data
-def add_new_column2(data):
+def add_column_B2T(data):
     new_column_values = []
     previous_value = None
     for index,row in data.iterrows():
@@ -129,7 +131,7 @@ def add_new_column2(data):
         previous_value = new_column_values[-1]
     data.insert(9, 'B2->T', new_column_values)
     return data
-def add_new_column3(data):
+def add_column_B3T(data):
     new_column_values = []
     previous_value = None
     for index,row in data.iterrows():
@@ -153,81 +155,17 @@ def difference_columns(df, column1, column2):
     avg_T = numeric_values_column2.mean()
 
     return avg_B - avg_T
-# Main code
-csv_file_path = 'test_data.csv'
-with open(csv_file_path, 'r') as file:
-    header_line = file.readline().strip()
-data_beacons = read_data(csv_file_path, header_line)
-beacon2_index, beacon3_index = calculate_beacon_indices(data_beacons)
-# print(f"Index B2: {beacon2_index}")
-# print(f"Index B3: {beacon3_index}")
-avg_P1S1, avg_P2S2, avg_P1S2, avg_P2S1, avg_P3S1, avg_P3S2 = calculate_averages(data_beacons, beacon2_index, beacon3_index)
-# print(f"Avg value p1s1: {avg_P1S1}, p2s2: {avg_P2S2},p1s2: {avg_P1S2}, p2s1: {avg_P2S1},p3s1: {avg_P3S1}, p3s2: {avg_P3S2}")
-
-# Define the function to aggregate non-empty values into a string without brackets
 def aggregate_non_empty(series):
     return series[series != ''].iloc[-1] if any(series != '') else ''
-
-# Read your CSV file and perform necessary preprocessing
-data = pd.read_csv(csv_file_path, skiprows=beacon3_index, header=None, delimiter=',', usecols=range(13))
-headers = header_line.split(',')[:13]
-data.columns = headers
-data = data.round()
-data = data.fillna('')
-
-# Group the DataFrame by every 4 rows and apply the aggregation function to each column separately
-grouped_data = data.groupby(data.index // 4).agg({col: aggregate_non_empty for col in data.columns}).reset_index()
-grouped_data = add_new_column1(grouped_data)
-grouped_data = add_new_column2(grouped_data)
-grouped_data = add_new_column3(grouped_data)
-
-dif1 = difference_columns(grouped_data,'B1->T','P4s1')
-dif2 = difference_columns(grouped_data,'B2->T','P4s3')
-dif3 = difference_columns(grouped_data,'B3->T','P4s5')
-print(f"difference 1: {dif1}, dif2: {dif2}, dif3:{dif3}")
-# Now grouped_data should contain individual values in each column instead of tuples
-grouped_data['Location'] = grouped_data.apply(calculate_location, axis=1)
-new_df = grouped_data.drop(columns=['P4s1','P4s2','P4s3','P4s4','P4s5','P4s6','Location'])
-
-distance_sensor_middle = 7
-new_df['1 final'] = round(new_df['B1->T'] + distance_sensor_middle - (dif1/2))
-new_df['2 final'] = round(new_df['B2->T'] + distance_sensor_middle - (dif2/2))
-new_df['3 final'] = round(new_df['B3->T'] + distance_sensor_middle - (dif3/2))
-new_df['Location'] = new_df.apply(calculate_location, axis=1)
-print(new_df)
-
 def extract_points(row):
-    # Assuming 'Location' column contains NumPy arrays of shape (3,)
     point_array = row['Location']
     if isinstance(point_array, np.ndarray) and point_array.shape == (3,):
         return tuple(point_array.tolist())  # Convert array to tuple
     else:
         return ([0,0,0])  # Return an empty tuple if the point is not valid
-
-
-all_points_over_time = new_df.apply(extract_points, axis=1).tolist()
-first_5_points = all_points_over_time[:5]  # Extract the first 5 points
-
-for point in first_5_points:
-    print(f"Point: {point}  type: {type(point)}")
-
-fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
-sc = ax.scatter([], [], [], c='r', marker='o')
-ax.set_xlabel('X Label')
-ax.set_ylabel('Y Label')
-ax.set_zlabel('Z Label')
-ax.set_xlim([0, 350])
-ax.set_ylim([0, 350])
-ax.set_zlim([-180, 0])
-ax.autoscale(enable=False)
-number_of_points_shown = 5
-data_queue = queue.Queue()
-
 def init():
     sc._offsets3d = ([], [], [])
     return sc,
-
 def update(frame):
     frame = frame + 1
     if frame < number_of_points_shown:
@@ -244,7 +182,72 @@ def update(frame):
     ax.text(0.95, 0.95, 0, f'Frame: {frame}', transform=ax.transAxes, ha='right', va='top', fontsize=12)  # Specify the text and add fontsize
     return sc,
 
-# Create animation
+# Main code
+
+# read in the data and find the moment where the beacons are initialized, and at what distance
+csv_file_path = 'test_data.csv'
+with open(csv_file_path, 'r') as file:
+    header_line = file.readline().strip()
+data_beacons = read_data(csv_file_path, header_line)
+beacon2_index, beacon3_index = calculate_beacon_indices(data_beacons)
+avg_P1S1, avg_P2S2, avg_P1S2, avg_P2S1, avg_P3S1, avg_P3S2 = calculate_averages(data_beacons, beacon2_index, beacon3_index)
+
+# read in the data after beacon initialization and prepare the data in compressed rows
+data = pd.read_csv(csv_file_path, skiprows=beacon3_index, header=None, delimiter=',', usecols=range(13))
+headers = header_line.split(',')[:13]
+data.columns = headers
+data = data.round()
+data = data.fillna('')
+grouped_data = data.groupby(data.index // 4).agg({col: aggregate_non_empty for col in data.columns}).reset_index()
+
+# Make new columns that compresses the data of the 2 sensors on each beacon
+# if measurement is equal to beacon initialization, last measurement is used 
+grouped_data = add_column_B1T(grouped_data)
+grouped_data = add_column_B2T(grouped_data)
+grouped_data = add_column_B3T(grouped_data)
+
+# Calculate the difference in measurements between the sensor pairs
+dif1 = difference_columns(grouped_data,'B1->T','P4s1')
+dif2 = difference_columns(grouped_data,'B2->T','P4s3')
+dif3 = difference_columns(grouped_data,'B3->T','P4s5')
+
+# remove the unnececery columns
+df = grouped_data.drop(columns=['P1s1','P1s2','P2s1','P2s2','P3s1','P3s2','P4s1','P4s2','P4s3','P4s4','P4s5','P4s6'])
+
+# calculate the location of the tag using only the beacon measurements
+distance_sensor_middle = 7
+df['1 final'] = round(df['B1->T'] + distance_sensor_middle - (dif1/2))
+df['2 final'] = round(df['B2->T'] + distance_sensor_middle - (dif2/2))
+df['3 final'] = round(df['B3->T'] + distance_sensor_middle - (dif3/2))
+df['Location'] = df.apply(calculate_location, axis=1)
+
+# check to see if the dataframe is printed correctly
+new_df = df.drop(columns=['B1->T','B2->T','B3->T'])
+new_df = new_df[new_df['Location'].notna()]
+print(new_df)
+
+# grab all the location points from the dataframe
+all_points_over_time = new_df.apply(extract_points, axis=1).tolist()
+
+# # check if the points are working, only used for debugging
+# first_5_points = all_points_over_time[:5] 
+# for point in first_5_points:
+#     print(f"Point: {point}  type: {type(point)}")
+
+# built the plot
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+sc = ax.scatter([], [], [], c='r', marker='o')
+ax.set_xlabel('X Label')
+ax.set_ylabel('Y Label')
+ax.set_zlabel('Z Label')
+ax.set_xlim([0, 350])
+ax.set_ylim([0, 350])
+ax.set_zlim([-180, 0])
+ax.autoscale(enable=False)
+number_of_points_shown = 5
+data_queue = queue.Queue()
+
+# Create and show animation
 animation = FuncAnimation(fig, update, frames=len(all_points_over_time), init_func=init, interval=500, blit=False)
-# Show the animation
 plt.show()
