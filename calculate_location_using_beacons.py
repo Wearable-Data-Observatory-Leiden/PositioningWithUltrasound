@@ -3,6 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.animation import FuncAnimation
+
+
 def trilateration(r1,r2,r3):
     P1 = np.array([0, 0, 0])   # beacon locations
     P2 = np.array([180, 0, 0])
@@ -164,36 +166,48 @@ def calculate_movement(point1, point2):
         return distance
 def fillna_with_tuple(series, value):
     return series.fillna(pd.Series([value] * len(series), index=series.index))
+
+
 # Main code
+
+# read in the data and find the moment where the beacons are initialized, and at what distance
 csv_file_path = 'test_data.csv'
 with open(csv_file_path, 'r') as file:
     header_line = file.readline().strip()
 data_beacons = read_data(csv_file_path, header_line)
 beacon2_index, beacon3_index = calculate_beacon_indices(data_beacons)
 avg_P1S1, avg_P2S2, avg_P1S2, avg_P2S1, avg_P3S1, avg_P3S2 = calculate_averages(data_beacons, beacon2_index, beacon3_index)
-# Read your CSV file and perform necessary preprocessing
+
+# read in the data after beacon initialization and prepare the data in compressed rows
 data = pd.read_csv(csv_file_path, skiprows=beacon3_index, header=None, delimiter=',', usecols=range(13))
 headers = header_line.split(',')[:13]
 data.columns = headers
 data = data.round()
 data = data.fillna('')
-# Group the DataFrame by every 4 rows and apply the aggregation function to each column separately
 grouped_data = data.groupby(data.index // 4).agg({col: aggregate_non_empty for col in data.columns}).reset_index()
-# Make new columns that uses the filtered data from the beacons
+
+# Make new columns that compresses the data of the 2 sensors on each beacon
+# if measurement is equal to beacon initialization, last measurement is used 
 grouped_data = add_column_B1T(grouped_data)
 grouped_data = add_column_B2T(grouped_data)
 grouped_data = add_column_B3T(grouped_data)
+
 # Calculate the difference in measurements between the sensor pairs
 dif1 = difference_columns(grouped_data,'B1->T','P4s1')
 dif2 = difference_columns(grouped_data,'B2->T','P4s3')
 dif3 = difference_columns(grouped_data,'B3->T','P4s5')
+
 # remove the unnececery columns
 df = grouped_data.drop(columns=['P1s1','P1s2','P2s1','P2s2','P3s1','P3s2','P4s1','P4s2','P4s3','P4s4','P4s5','P4s6'])
+
+# calculate the location of the tag using all 6 measurements 
 distance_sensor_middle = 7
 df['1 final'] = round(df['B1->T'] + distance_sensor_middle - (dif1/2))
 df['2 final'] = round(df['B2->T'] + distance_sensor_middle - (dif2/2))
 df['3 final'] = round(df['B3->T'] + distance_sensor_middle - (dif3/2))
 df['Location'] = df.apply(calculate_location, axis=1)
+
+# add the a movement column and show the results
 df = df.drop(columns=['B1->T','B2->T','B3->T'])
 df = df[df['Location'].notna()]
 df['Movement'] = df['Location'].diff().fillna(0).apply(
