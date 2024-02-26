@@ -200,7 +200,7 @@ dif3 = difference_columns(grouped_data,'B3->T','P4s5')
 # remove the unnececery columns
 df = grouped_data.drop(columns=['P1s1','P1s2','P2s1','P2s2','P3s1','P3s2','P4s1','P4s2','P4s3','P4s4','P4s5','P4s6'])
 
-# calculate the location of the tag using all 6 measurements 
+# calculate the location of the tag using only the beacon measurements
 distance_sensor_middle = 7
 df['1 final'] = round(df['B1->T'] + distance_sensor_middle - (dif1/2))
 df['2 final'] = round(df['B2->T'] + distance_sensor_middle - (dif2/2))
