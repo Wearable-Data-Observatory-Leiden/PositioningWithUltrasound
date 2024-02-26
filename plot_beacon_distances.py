@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+
 def read_data(csv_file_path, header_line):
     # Read the CSV file with the determined delimiter and specifying the number of columns to read
     data_beacons = pd.read_csv(csv_file_path, header=None, delimiter=',', usecols=range(7))
@@ -29,17 +30,21 @@ def calculate_beacon_indices(data_beacons):
 def aggregate_non_empty(series):
     return series[series != ''].iloc[-1] if any(series != '') else ''
 
+# Main code
+
+# read in the data and find the moment where the beacons are initialized, and at what distance
 csv_file_path = 'test_data.csv'
 with open(csv_file_path, 'r') as file:
     header_line = file.readline().strip()
 data_beacons = read_data(csv_file_path, header_line)
 beacon2_index, beacon3_index = calculate_beacon_indices(data_beacons)
+
+# read in the data after beacon initialization and prepare the data in compressed rows
 data = pd.read_csv(csv_file_path, skiprows=beacon3_index, header=None, delimiter=',', usecols=range(13))
 headers = header_line.split(',')[:13]
 data.columns = headers
 data = data.round()
 data = data.fillna('')
-
 grouped_data = data.groupby(data.index // 4).agg({col: aggregate_non_empty for col in data.columns}).reset_index()
 print(grouped_data)
 
