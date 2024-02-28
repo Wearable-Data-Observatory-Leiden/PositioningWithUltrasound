@@ -24,13 +24,13 @@ def main():
     while True:
         serialInst1.write(var1.encode('utf-8'))
         serialInst2.write(var1.encode('utf-8'))
-        time.sleep(0.1)
+        time.sleep(0.2)
         if serialInst1.in_waiting:   # wait for data from the arduino
             data1 = serialInst1.readline().decode('utf').rstrip('\n')
             print(f"sData port1: {data1} ") # the first letter doesn't get printed for some reason
         if serialInst2.in_waiting:   # wait for data from the arduino
             data2 = serialInst2.readline().decode('utf').rstrip('\n')
-            print(f"sData port2: {data2} ")
+            print(f"sData port2:                              {data2} ")
 
 # makes sure  that he main gets called
 if __name__ == "__main__":
