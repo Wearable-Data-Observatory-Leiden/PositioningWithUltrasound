@@ -1,0 +1,8 @@
+This test contains of 2 files, a python file and an Arduino file. 
+
+test1New.ino (Arduino)
+The arduino file is made for 2 sensors, sending trigger signals to the sensors. 
+The sensors are triggered alternating in a loop.
+
+test1.py (Python)
+This file uploads the Arduino file to the Arduino and collects the measured distances from the test.
