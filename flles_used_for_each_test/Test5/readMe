@@ -1,0 +1,11 @@
+This test consists of six files: two Arduino files and four Python files.
+
+Arduino Files:
+2sensors.ino (Beacons): Triggers a sensor based on the incoming input. If input is 1, sensor 1 is triggered; if input is 2, sensor 2 is triggered.
+6sensors.ino (Tag): Works similarly to 2sensors.ino, but for six sensors. Inputs from 1 to 6 trigger the corresponding sensors.
+
+Python Files:
+trigger_all_sensors_calibration.py: Uploads the Arduino files and sends inputs to the Arduinos for sensor triggering. The beacons are initialized first, followed by the tag, though tag triggering is not required for this test. The triggered sensors follow a cycle.
+find_start_moment(2).py: Uses the pandas library to find the moment when the beacon setup ends and the tag location measurement begins.
+test1_pandas-12-04.py: After the tag is measured, this file analyzes the data to calculate the distances between the tag and each beacon based on the measurements.
+plot_tracked_data.py: Calculates the locations of the tag based on the distances to the beacons and plots the movement of the tag over time.
