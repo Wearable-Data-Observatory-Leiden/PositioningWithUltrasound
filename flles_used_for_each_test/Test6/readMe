@@ -1,0 +1,9 @@
+This test consists of four files: two Arduino files and two Python file.
+
+Arduino Files:
+2sensors.ino (Beacons): Triggers a sensor based on the incoming input. If input is 1, sensor 1 is triggered; if input is 2, sensor 2 is triggered.
+6sensors.ino (Tag): Works similarly to 2sensors.ino, but for six sensors. Inputs from 1 to 6 trigger the corresponding sensors.
+
+Python File:
+trigger_all_sensors_calibration.py: Uploads the Arduino files and sends inputs to the Arduinos for sensor triggering. The beacons are initialized first, followed by the tag. The triggered sensors follow a cycle.
+test1_pandas-12-04.py: Extracts the connections between the tag and each beacon based on the measured data. These connections are then used to determine the orientation.
