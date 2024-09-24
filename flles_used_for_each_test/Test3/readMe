@@ -1,0 +1,8 @@
+This test consists of two files: a Python file and an Arduino file.
+
+test2New.ino (Arduino)
+Waits for an input to trigger sensor 1.
+Only one sensor can be connected at a time.
+test2.py (Python)
+Uploads the Arduino file to the Arduino device.
+Collects the measured distances from both sensors and keeps the data separate.
