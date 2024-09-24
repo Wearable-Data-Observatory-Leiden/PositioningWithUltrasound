@@ -1,0 +1,4 @@
+This test only contains an Arduino file
+
+2sensors.ino (Arduino)
+The file triggers 2 sensors that are connected to the same Arduino in a loop.
