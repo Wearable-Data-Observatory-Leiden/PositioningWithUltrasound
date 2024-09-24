@@ -1,4 +1,4 @@
-This test only contains an Arduino file
+This test contains only an Arduino file.
 
 2sensors.ino (Arduino)
-The file triggers 2 sensors that are connected to the same Arduino in a loop.
+Triggers two sensors connected to the same Arduino in a loop.
